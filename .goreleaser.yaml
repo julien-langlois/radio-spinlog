@@ -1,0 +1,39 @@
+# Release configuration: `git tag vX.Y.Z && git push --tags` triggers .github/workflows/release.yml
+version: 2
+
+project_name: radio-spinlog
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/radio-spinlog
+    env:
+      - CGO_ENABLED=0 # pure Go SQLite driver: static binaries, no C toolchain
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

@@ -1,0 +1,18 @@
+# Normalize line endings: LF in the repository and in the working tree, on every OS
+# (gofmt writes LF; CRLF checkouts on Windows would show every Go file as modified)
+* text=auto eol=lf
+
+# Go
+*.go   text eol=lf diff=golang
+go.mod text eol=lf
+go.sum text eol=lf linguist-generated=true
+
+# Configuration and documentation
+*.json text eol=lf
+*.md   text eol=lf diff=markdown
+
+# Never treat these as text
+*.db      binary
+*.sqlite  binary
+*.sqlite3 binary
+*.tar.gz  binary

@@ -1,0 +1,54 @@
+# Binaries
+/radio-spinlog
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries (go test -c), coverage and profiling output
+*.test
+*.out
+*.prof
+coverage.*
+
+# Go workspace files (local multi-module setup)
+go.work
+go.work.sum
+
+# Dependencies are fetched from go.mod / go.sum, not vendored
+vendor/
+
+# Runtime data: the SQLite archive, its WAL files and backups
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Local overrides (active radios)
+local.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code settings (kept local)
+.claude/

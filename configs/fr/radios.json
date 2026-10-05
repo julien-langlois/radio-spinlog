@@ -1,0 +1,113 @@
+{
+  "timezone": "Europe/Paris",
+  "radios": [
+    {
+      "name": "Radio Nova",
+      "slug": "nova",
+      "type": "api",
+      "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
+      "interval_seconds": 120,
+      "selectors": {
+        "artist": "#(radio.code==\"radio-nova\").currentTrack.artist",
+        "title": "#(radio.code==\"radio-nova\").currentTrack.title",
+        "played_at": "#(radio.code==\"radio-nova\").currentTrack.diffusion_date"
+      }
+    },
+    {
+      "name": "Nova Hip-Hop",
+      "slug": "nova-hip-hop",
+      "type": "api",
+      "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
+      "interval_seconds": 120,
+      "selectors": {
+        "artist": "#(radio.code==\"nova-hip-hop\").currentTrack.artist",
+        "title": "#(radio.code==\"nova-hip-hop\").currentTrack.title",
+        "played_at": "#(radio.code==\"nova-hip-hop\").currentTrack.diffusion_date"
+      }
+    },
+    {
+      "name": "Nova Reggae",
+      "slug": "nova-reggae",
+      "type": "api",
+      "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
+      "interval_seconds": 120,
+      "selectors": {
+        "artist": "#(radio.code==\"nova-reggae\").currentTrack.artist",
+        "title": "#(radio.code==\"nova-reggae\").currentTrack.title",
+        "played_at": "#(radio.code==\"nova-reggae\").currentTrack.diffusion_date"
+      }
+    },
+    {
+      "name": "Nova Soul",
+      "slug": "nova-soul",
+      "type": "api",
+      "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
+      "interval_seconds": 120,
+      "selectors": {
+        "artist": "#(radio.code==\"nova-soul\").currentTrack.artist",
+        "title": "#(radio.code==\"nova-soul\").currentTrack.title",
+        "played_at": "#(radio.code==\"nova-soul\").currentTrack.diffusion_date"
+      }
+    },
+    {
+      "name": "Nouvo Nova",
+      "slug": "nouvo-nova",
+      "type": "api",
+      "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
+      "interval_seconds": 120,
+      "selectors": {
+        "artist": "#(radio.code==\"nouvo-nova\").currentTrack.artist",
+        "title": "#(radio.code==\"nouvo-nova\").currentTrack.title",
+        "played_at": "#(radio.code==\"nouvo-nova\").currentTrack.diffusion_date"
+      }
+    },
+    {
+      "name": "Nova La Nuit",
+      "slug": "nova-la-nuit",
+      "type": "api",
+      "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
+      "interval_seconds": 120,
+      "selectors": {
+        "artist": "#(radio.code==\"nova-lanuit\").currentTrack.artist",
+        "title": "#(radio.code==\"nova-lanuit\").currentTrack.title",
+        "played_at": "#(radio.code==\"nova-lanuit\").currentTrack.diffusion_date"
+      }
+    },
+    {
+      "name": "Nova Classics",
+      "slug": "nova-classics",
+      "type": "api",
+      "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
+      "interval_seconds": 120,
+      "selectors": {
+        "artist": "#(radio.code==\"nova-classics\").currentTrack.artist",
+        "title": "#(radio.code==\"nova-classics\").currentTrack.title",
+        "played_at": "#(radio.code==\"nova-classics\").currentTrack.diffusion_date"
+      }
+    },
+    {
+      "name": "Nova Danse",
+      "slug": "nova-danse",
+      "type": "api",
+      "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
+      "interval_seconds": 120,
+      "selectors": {
+        "artist": "#(radio.code==\"nova-danse\").currentTrack.artist",
+        "title": "#(radio.code==\"nova-danse\").currentTrack.title",
+        "played_at": "#(radio.code==\"nova-danse\").currentTrack.diffusion_date"
+      }
+    },
+    {
+      "name": "Nova La Plage",
+      "slug": "nova-la-plage",
+      "type": "api",
+      "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
+      "interval_seconds": 120,
+      "selectors": {
+        "artist": "#(radio.code==\"nova-la-plage\").currentTrack.artist",
+        "title": "#(radio.code==\"nova-la-plage\").currentTrack.title",
+        "played_at": "#(radio.code==\"nova-la-plage\").currentTrack.diffusion_date"
+      }
+    }
+  ]
+}
