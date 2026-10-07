@@ -2,10 +2,17 @@ package crawler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/julien-langlois/radio-spinlog/internal/alert"
 	"github.com/julien-langlois/radio-spinlog/internal/domain"
 )
 
@@ -71,5 +78,46 @@ func TestWorkerDetectsPlays(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("got %v, want %v", got, want)
 		}
+	}
+}
+
+// A radio that goes quiet raises one alert, however long it lasts, then one when it comes back.
+func TestWorkerAlertsOnStaleSource(t *testing.T) {
+	var mu sync.Mutex
+	var events []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var p map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+			t.Error(err)
+		}
+		mu.Lock()
+		events = append(events, p["event"]+"|"+p["radio"])
+		mu.Unlock()
+	}))
+	defer srv.Close()
+	if err := alert.Configure(srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = alert.Configure("") }()
+
+	startJitter = 1
+	savedStale := staleAfter
+	staleAfter = 0 // every poll without a new track counts as a long silence
+	defer func() { staleAfter = savedStale }()
+
+	var unknown time.Time
+	ctx, cancel := context.WithCancel(context.Background())
+	scraper := &fakeScraper{stop: cancel, steps: []func() (*domain.Track, error){
+		play("", "", unknown), // silence: stale
+		play("", "", unknown), // still stale: logged again, not alerted again
+		play("A", "One", unknown),
+	}}
+	ch := make(chan domain.Track, 5)
+	StartMonitoring(ctx, domain.RadioConfig{Slug: "fr-r"}, scraper, "", ch)
+	alert.Wait()
+
+	sort.Strings(events)
+	if want := "source_recovered|fr-r source_stale|fr-r"; strings.Join(events, " ") != want {
+		t.Errorf("got %v, want %s", events, want)
 	}
 }

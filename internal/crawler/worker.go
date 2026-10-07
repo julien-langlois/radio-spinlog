@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/julien-langlois/radio-spinlog/internal/alert"
 	"github.com/julien-langlois/radio-spinlog/internal/domain"
 )
 
@@ -35,7 +36,11 @@ func StartMonitoring(ctx context.Context, cfg domain.RadioConfig, scraper Scrape
 
 		case <-time.After(backoffDelay):
 			if time.Since(lastNewTrack) > staleAfter && time.Since(lastStaleWarning) > staleAfter {
-				slog.Warn("No new track for a long time, source or selectors may be broken", "radio", cfg.Slug, "since", time.Since(lastNewTrack).Round(time.Minute).String())
+				since := time.Since(lastNewTrack).Round(time.Minute).String()
+				slog.Warn("No new track for a long time, source or selectors may be broken", "radio", cfg.Slug, "since", since)
+				if lastStaleWarning.IsZero() { // the log line repeats, the alert is sent once per outage
+					alert.Send(alert.SourceStale, cfg.Slug, cfg.Slug+" has produced no new track for "+since+": its source or its selectors may be broken")
+				}
 				lastStaleWarning = time.Now()
 			}
 
@@ -78,11 +83,12 @@ func StartMonitoring(ctx context.Context, cfg domain.RadioConfig, scraper Scrape
 
 			if !lastStaleWarning.IsZero() {
 				slog.Info("Source is producing tracks again", "radio", cfg.Slug)
+				alert.Send(alert.SourceRecovered, cfg.Slug, cfg.Slug+" is producing tracks again")
 				lastStaleWarning = time.Time{}
 			}
 			lastNewTrack = time.Now()
 
-			// Send to SQLite channel
+			// Send to the database writer
 			trackChan <- *track
 			slog.Info("New track detected", "radio", cfg.Slug, "artist", track.Artist, "title", track.Title)
 		}

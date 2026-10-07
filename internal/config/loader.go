@@ -29,6 +29,10 @@ const appName = "radio-spinlog"
 // A PostgreSQL URL carries a password: the environment keeps it out of the process list.
 const dbEnv = "RADIO_SPINLOG_DB"
 
+// webhookEnv names the environment variable holding the alert webhook when -webhook is not given.
+// Webhook URLs embed a token, hence the environment here too.
+const webhookEnv = "RADIO_SPINLOG_WEBHOOK"
+
 // defaultDBPath puts the archive in the per-user data directory, so the same database is used
 // wherever the binary is started from: $XDG_DATA_HOME or ~/.local/share on Linux and BSD,
 // ~/Library/Application Support on macOS, %AppData% on Windows.
@@ -71,6 +75,7 @@ func Load(version string) ([]domain.RadioConfig, *domain.GlobalConfig) {
 	defaultLocal := defaultLocalFile()
 	localFile := flag.String("local", defaultLocal, "JSON file listing the active radios (optional at its default location)")
 	dbPath := flag.String("db", "", "SQLite database file or postgres:// URL (default: $"+dbEnv+", else "+defaultDBPath()+")")
+	webhook := flag.String("webhook", "", "URL receiving a JSON POST when a source goes quiet or tracks are lost (default: $"+webhookEnv+")")
 	userAgent := flag.String("user-agent", "radio-spinlog/"+version+" (personal playlist archive)", "User-Agent sent to the sources; add a contact URL or email if you can")
 	debug := flag.Bool("debug", false, "Log every poll and HTTP request")
 	stats := flag.Bool("stats", false, "Show the latest archived tracks and totals per radio (refreshed every 2 minutes), without crawling")
@@ -83,7 +88,7 @@ func Load(version string) ([]domain.RadioConfig, *domain.GlobalConfig) {
 		os.Exit(0)
 	}
 
-	globalConfig := &domain.GlobalConfig{UserAgent: *userAgent, Debug: *debug, Stats: *stats, DBPath: cmp.Or(*dbPath, os.Getenv(dbEnv), defaultDBPath())}
+	globalConfig := &domain.GlobalConfig{UserAgent: *userAgent, Debug: *debug, Stats: *stats, DBPath: cmp.Or(*dbPath, os.Getenv(dbEnv), defaultDBPath()), Webhook: cmp.Or(*webhook, os.Getenv(webhookEnv))}
 
 	// 2. Load station definitions: built into the binary, or from a directory
 	var source fs.FS = configs.FS

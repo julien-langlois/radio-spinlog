@@ -43,6 +43,7 @@ Stop with `Ctrl+C` or `SIGTERM`: workers finish, buffered tracks are written, th
 | `-db TARGET` | `$RADIO_SPINLOG_DB`, else see [Files](#files) | SQLite database file (its directory is created if needed) or a `postgres://` URL, see [PostgreSQL](#postgresql-supabase). |
 | `-configs DIR` | built-in | Directory of `<country>/radios.json` files to use **instead of** the built-in stations. |
 | `-local FILE` | see [Files](#files) | File listing the active stations. Optional when left to its default. |
+| `-webhook URL` | `$RADIO_SPINLOG_WEBHOOK` | Where to push [alerts](#alerts). None by default. |
 | `-user-agent` | `radio-spinlog/<version> (personal playlist archive)` | Sent with every request. Add a contact URL or email if you can. |
 | `-version` | — | Print the version and exit. |
 
@@ -151,6 +152,39 @@ radio-spinlog -stats     # reads the same database
 - **Row level security is enabled** on both tables without any policy, so that Supabase's auto-generated REST API does not expose them to the anonymous key. The role that created the tables (the one in the URL) is not affected. To read the data with another role, add a policy (`CREATE POLICY ... FOR SELECT`) or give that role `BYPASSRLS`.
 - **The backend is chosen at startup, there is no failover to SQLite.** A failed insert is retried for about a minute (dropped connection, pooler restart); past that the track is lost and logged as `Insert failed, track lost`. If the database is unreachable at startup, the daemon exits.
 
+## Alerts
+
+Problems are always written to the logs. To be told about the ones that need a human, give the daemon a webhook URL; it receives a JSON `POST` for each event:
+
+```bash
+export RADIO_SPINLOG_WEBHOOK='https://discord.com/api/webhooks/<id>/<token>'
+radio-spinlog
+```
+
+| `event` | Sent when |
+|---|---|
+| `started` | The daemon starts. Also the way to check that the webhook works. |
+| `source_stale` | A station has produced no new track for an hour: its source or its selectors may be broken. Sent once per silence, not every hour. |
+| `source_recovered` | That station produces tracks again. |
+| `track_lost` | A track could not be written to the database after all retries. |
+| `writer_failed` | The database writer could not start: nothing is being archived. |
+
+```json
+{
+  "event": "source_stale",
+  "radio": "fr-nova",
+  "text": "radio-spinlog: fr-nova has produced no new track for 1h0m0s: its source or its selectors may be broken",
+  "content": "radio-spinlog: fr-nova has produced no new track for 1h0m0s: its source or its selectors may be broken"
+}
+```
+
+- The message is given twice on purpose: Slack-compatible webhooks (Slack, Mattermost) read `text`, Discord reads `content`. Anything else can use `event` and `radio`; `radio` is empty for events that are not about one station.
+- **Keep the URL in the environment**: it usually embeds a token. `-webhook` accepts it too. It never appears in the logs.
+- The same event for the same station is sent at most once an hour, so a database outage is one `track_lost` alert, not one per track.
+- Alerts are best effort: one attempt, 10 seconds timeout, a failure is logged as `Alert not delivered` and never slows the collection down.
+- Stations that legitimately air no music for more than an hour (talk shows, night programmes) will raise `source_stale` and `source_recovered` every day.
+- A daemon that is not running cannot alert: pair this with a process supervisor.
+
 ## Data
 
 With SQLite everything lives in one file, `archive.db` (see [Files](#files) for its location; WAL mode, safe to read while the daemon runs). PostgreSQL holds the same two tables:
@@ -194,7 +228,7 @@ configs/**/radios.json ─► one goroutine per station ─► channel ─► si
 - **New play detection.** A play is identified by the song hash plus `played_at` when available. A row is written when that key changes. On restart, the last key of each station (if less than 15 minutes old) is reloaded so the song still on air is not inserted twice.
 - **Empty artist and title** are treated as an ad break or silence and skipped.
 - **Errors** (network failure, non-200 status) trigger an exponential backoff: twice the interval, doubling up to 5 minutes, reset on success.
-- **Stale sources.** A station that yields no new track for an hour logs a warning (`No new track for a long time`), repeated hourly until tracks come back. This catches what produces no error: a selector broken by a change at the source, or a frozen endpoint. Stations that legitimately air no music for hours (talk shows) will trigger it too.
+- **Stale sources.** A station that yields no new track for an hour logs a warning (`No new track for a long time`), repeated hourly until tracks come back. This catches what produces no error: a selector broken by a change at the source, or a frozen endpoint. Stations that legitimately air no music for hours (talk shows) will trigger it too. With a webhook, the first warning and the recovery are pushed as [alerts](#alerts).
 
 ### Being a polite client
 
@@ -242,7 +276,7 @@ A published version is permanent: the Go module proxy keeps it, so fix mistakes 
 - Without a `played_at` selector, the same song played twice in a row (or on both sides of an ad break) is counted once.
 - A track shorter than the polling interval can be missed entirely.
 - The HTML scraper has not been exercised against a real station yet; pages rendered by JavaScript will not work.
-- Alerts are log lines only: nothing pushes a notification when a source breaks.
+- [Alerts](#alerts) cover broken sources and lost tracks, not a daemon that stopped running.
 - `-configs` replaces the built-in stations instead of adding to them.
 
 ## Disclaimer

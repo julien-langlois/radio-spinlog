@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/julien-langlois/radio-spinlog/internal/alert"
 	"github.com/julien-langlois/radio-spinlog/internal/config"
 	"github.com/julien-langlois/radio-spinlog/internal/crawler"
 	"github.com/julien-langlois/radio-spinlog/internal/domain"
@@ -38,6 +39,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := alert.Configure(globalCfg.Webhook); err != nil {
+		slog.Error("Invalid -webhook / RADIO_SPINLOG_WEBHOOK", "err", err)
+		os.Exit(1)
+	}
+	defer alert.Wait() // runs last: alerts raised during the shutdown still go out
+
 	// 3. Initialize the database (SQLite file or PostgreSQL URL)
 	db, err := storage.Open(globalCfg.DBPath)
 	if err != nil {
@@ -62,7 +69,8 @@ func main() {
 		close(writerDone)
 	}()
 
-	slog.Info("Starting radio-spinlog", "version", version, "active_radios", len(radios), "db", storage.Redact(globalCfg.DBPath))
+	slog.Info("Starting radio-spinlog", "version", version, "active_radios", len(radios), "db", storage.Redact(globalCfg.DBPath), "alerts", globalCfg.Webhook != "")
+	alert.Send(alert.Started, "", fmt.Sprintf("%s started, tracking %d stations", version, len(radios)))
 
 	// 6. Initialize both scrapers
 	htmlScraper := &crawler.StaticScraper{UserAgent: globalCfg.UserAgent}

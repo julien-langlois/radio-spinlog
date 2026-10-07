@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/julien-langlois/radio-spinlog/internal/alert"
 	"github.com/julien-langlois/radio-spinlog/internal/domain"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // pure Go PostgreSQL driver (Supabase or any other PostgreSQL)
@@ -211,6 +212,7 @@ func (s *DB) StartWriter(ctx context.Context, trackChan <-chan domain.Track) {
 	`))
 	if err != nil {
 		slog.Error("Failed to prepare statement", "err", err)
+		alert.Send(alert.WriterFailed, "", "the database writer could not start, nothing is being archived")
 		return
 	}
 	defer stmt.Close()
@@ -230,6 +232,7 @@ func (s *DB) StartWriter(ctx context.Context, trackChan <-chan domain.Track) {
 			}
 			if attempt == len(insertRetryDelays) || ctx.Err() != nil {
 				slog.Error("Insert failed, track lost", "radio", track.RadioSlug, "artist", track.Artist, "title", track.Title, "err", err)
+				alert.Send(alert.TrackLost, "", "tracks are being lost, the database rejects writes (first one: "+track.RadioSlug+", "+track.Artist+" - "+track.Title+")")
 				break
 			}
 			slog.Warn("Insert failed, retrying", "radio", track.RadioSlug, "retry_in", insertRetryDelays[attempt].String(), "err", err)
