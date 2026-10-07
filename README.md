@@ -28,6 +28,7 @@ radio-spinlog -list                          # show the available stations
 radio-spinlog                                # track the stations of local.json, or all of them
 radio-spinlog -radios fr-nova,fr-nova-soul   # track a specific set
 radio-spinlog -stats                         # check what is being archived (latest tracks, totals)
+radio-spinlog -check -radios fr-nova         # test a station definition: one request, nothing archived
 ```
 
 The archive lives in your user data directory (see [Files](#files)), so the same database is used wherever you start the binary from. From a checkout of the repository, replace `radio-spinlog` with `go run ./cmd/radio-spinlog`.
@@ -38,6 +39,7 @@ Stop with `Ctrl+C` or `SIGTERM`: workers finish, buffered tracks are written, th
 |---|---|---|
 | `-radios a,b` | — | Comma-separated [slugs](#slugs) to track (`fr-nova,fr-nova-soul`). Overrides the local file. |
 | `-list` | — | Print the available stations and exit. |
+| `-check` | — | Fetch each selected station once, print what its selectors extract and exit. See [Testing a station](#testing-a-station). |
 | `-debug` | off | Log every poll and every HTTP request. |
 | `-stats` | — | Print the 10 latest tracks and the totals per station, refreshed every 2 minutes. Reads the database only, so it can run next to a crawling instance. |
 | `-db TARGET` | `$RADIO_SPINLOG_DB`, else see [Files](#files) | SQLite database file (its directory is created if needed) or a `postgres://` URL, see [PostgreSQL](#postgresql-supabase). |
@@ -120,6 +122,30 @@ Selector syntax depends on `type`:
 `played_at` accepts unix seconds or milliseconds, RFC 3339 (`2026-10-05T10:50:07+02:00`), or a local `YYYY-MM-DD HH:MM:SS` which is interpreted in the station's `timezone`. Country is not enough to convert local times (several timezones per country, daylight saving), hence the explicit timezone. Without one, local times are read as UTC and a warning is logged.
 
 Only point `played_at` at a real track start time. A field that changes on every request (server time, for instance) would create a new row at every poll.
+
+### Testing a station
+
+`-check` fetches the selected stations once and shows what would be archived, without opening the database:
+
+```bash
+radio-spinlog -check -radios fr-nova
+radio-spinlog -configs ./my-configs -check -radios jp-example   # a definition you are writing
+```
+
+```text
+fr-my-radio  My Radio [fr, Europe/Paris]
+  source     api  https://www.myradio.com/spin.json
+  artist     ARTIST
+  title      TITLE
+  played_at  2026-01-01 11:00:00 UTC = 2026-01-01 13:00:00 CEST at the station
+  result     OK
+```
+
+- The stations are chosen like for a normal run: `-radios`, else `local.json`, else all of them. Stations sharing a URL still cause a single request.
+- `result` is `OK` when artist, title and (if a selector is configured) `played_at` were all extracted. Otherwise it says what is missing, and the command exits with status 1.
+- `NOTHING EXTRACTED` does not always mean wrong selectors: the station may be in an ad break. Try again a few minutes later before concluding.
+- Check that the local time shown for `played_at` matches the station's clock: a wrong `timezone` shows up there.
+- It is safe next to a running daemon (no database, no alert), but it is a real request to the source: do not loop on it.
 
 ### Active stations: `local.json`
 

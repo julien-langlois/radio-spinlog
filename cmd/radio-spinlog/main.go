@@ -39,6 +39,28 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Scrapers: HTML by default, JSON for the "api" type
+	htmlScraper := &crawler.StaticScraper{UserAgent: globalCfg.UserAgent}
+	apiScraper := &crawler.ApiScraper{UserAgent: globalCfg.UserAgent}
+	scraperFor := func(r domain.RadioConfig) crawler.Scraper {
+		if r.Type == "api" {
+			return apiScraper
+		}
+		return htmlScraper
+	}
+
+	if globalCfg.Check {
+		// One request per URL, no database, no alert: safe next to a running daemon
+		ok := true
+		for _, r := range radios {
+			ok = crawler.Check(context.Background(), os.Stdout, r, scraperFor(r)) && ok
+		}
+		if !ok {
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := alert.Configure(globalCfg.Webhook); err != nil {
 		slog.Error("Invalid -webhook / RADIO_SPINLOG_WEBHOOK", "err", err)
 		os.Exit(1)
@@ -82,29 +104,16 @@ func main() {
 	slog.Info("Starting radio-spinlog", "version", version, "active_radios", len(radios), "db", storage.Redact(globalCfg.DBPath), "alerts", globalCfg.Webhook != "")
 	alert.Send(alert.Started, "", fmt.Sprintf("%s started, tracking %d stations", version, len(radios)))
 
-	// 6. Initialize both scrapers
-	htmlScraper := &crawler.StaticScraper{UserAgent: globalCfg.UserAgent}
-	apiScraper := &crawler.ApiScraper{UserAgent: globalCfg.UserAgent}
-
-	// 7. Route each radio to its scraper
+	// 6. One worker per radio
 	var workers sync.WaitGroup
 	for _, r := range radios {
-		var activeScraper crawler.Scraper = htmlScraper // HTML by default
-
-		if r.Type == "api" {
-			activeScraper = apiScraper
-			slog.Debug("Using API scraper", "radio", r.Slug)
-		} else {
-			slog.Debug("Using HTML scraper", "radio", r.Slug)
-		}
-
 		lastKey := db.LastKey(r.Slug)
 		workers.Go(func() {
-			crawler.StartMonitoring(ctx, r, activeScraper, lastKey, trackChan)
+			crawler.StartMonitoring(ctx, r, scraperFor(r), lastKey, trackChan)
 		})
 	}
 
-	// 8. Wait for OS signals (Ctrl+C)
+	// 7. Wait for OS signals (Ctrl+C)
 	<-ctx.Done()
 
 	slog.Warn("Shutdown signal received, closing resources...")

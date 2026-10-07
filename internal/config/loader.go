@@ -79,6 +79,7 @@ func Load(version string) ([]domain.RadioConfig, *domain.GlobalConfig) {
 	userAgent := flag.String("user-agent", "radio-spinlog/"+version+" (personal playlist archive)", "User-Agent sent to the sources; add a contact URL or email if you can")
 	debug := flag.Bool("debug", false, "Log every poll and HTTP request")
 	stats := flag.Bool("stats", false, "Show the latest archived tracks and totals per radio (refreshed every 2 minutes), without crawling")
+	check := flag.Bool("check", false, "Fetch each selected radio once, print what its selectors extract and exit; nothing is archived")
 	listFlag := flag.Bool("list", false, "List all available radios and exit")
 	versionFlag := flag.Bool("version", false, "Print the version and exit")
 	flag.Parse()
@@ -88,7 +89,7 @@ func Load(version string) ([]domain.RadioConfig, *domain.GlobalConfig) {
 		os.Exit(0)
 	}
 
-	globalConfig := &domain.GlobalConfig{UserAgent: *userAgent, Debug: *debug, Stats: *stats, DBPath: cmp.Or(*dbPath, os.Getenv(dbEnv), defaultDBPath()), Webhook: cmp.Or(*webhook, os.Getenv(webhookEnv))}
+	globalConfig := &domain.GlobalConfig{UserAgent: *userAgent, Debug: *debug, Stats: *stats, Check: *check, DBPath: cmp.Or(*dbPath, os.Getenv(dbEnv), defaultDBPath()), Webhook: cmp.Or(*webhook, os.Getenv(webhookEnv))}
 
 	// 2. Load station definitions: built into the binary, or from a directory
 	var source fs.FS = configs.FS

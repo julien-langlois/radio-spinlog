@@ -48,6 +48,7 @@ type GlobalConfig struct {
 	UserAgent string // sent with every request: stable and honest, so a source can identify us
 	Debug     bool   // -debug flag
 	Stats     bool   // -stats flag: show what is in the database instead of crawling
+	Check     bool   // -check flag: fetch each selected radio once and print what is extracted, archive nothing
 	DBPath    string // -db flag or RADIO_SPINLOG_DB: SQLite file or postgres:// URL
 	Webhook   string // -webhook flag or RADIO_SPINLOG_WEBHOOK: URL receiving the alerts, empty for none
 }

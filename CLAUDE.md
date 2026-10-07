@@ -9,7 +9,7 @@ go build ./...
 go vet ./...
 go test ./...
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run   # same version as CI, config in .golangci.yml
-go run ./cmd/radio-spinlog [-radios a,b] [-list] [-debug] [-stats] [-db FILE|postgres://URL] [-webhook URL] [-configs DIR] [-local FILE] [-user-agent "..."] [-version]
+go run ./cmd/radio-spinlog [-radios a,b] [-list] [-debug] [-stats] [-check] [-db FILE|postgres://URL] [-webhook URL] [-configs DIR] [-local FILE] [-user-agent "..."] [-version]
 ```
 
 - Stations are embedded from `configs/` at build time (`-configs DIR` reads a directory instead). `-db` and `-local` default to per-user directories (`~/.local/share/radio-spinlog/archive.db` and `~/.config/radio-spinlog/local.json` on Linux; see `defaultDBPath` / `defaultLocalFile`), never the working directory.
@@ -28,6 +28,7 @@ internal/config/loader.go         CLI flags, station loading (embedded or -confi
 internal/domain/models.go         Track (PlayKey), RadioConfig, Selector, GlobalConfig
 internal/crawler/worker.go        per-radio loop: fetch, backoff, new-play detection, stale-source warning
 internal/crawler/fetch.go         shared HTTP layer: per-URL cache, conditional requests, Retry-After
+internal/crawler/check.go         -check: fetch a radio once and print what the selectors extract
 internal/crawler/scraper.go       Scraper interface + StaticScraper (HTML, goquery)
 internal/crawler/api_scraper.go   ApiScraper (JSON, gjson)
 internal/crawler/playedat.go      source timestamp → UTC
@@ -74,5 +75,5 @@ These are deliberate. Do not change them without being asked.
 
 - `flag.Parse` and `os.Exit` live inside `config.Load`; test `loadRadios` and `filterRadios` instead.
 - Alerts (`internal/alert`) cover stale sources and lost tracks, not a daemon that is down. The former `internal/notifier` (WhatsApp, i18n) was removed as dead code; an archive sits in `data/notifier-backup.tar.gz`.
-- `StaticScraper` has never run against a real station.
+- `StaticScraper` has never run against a real station (`-check` is the way to try one).
 - `data/` and `local.json` at the repository root are leftovers from before the per-user directories; they are git-ignored and no longer read by default.

@@ -121,3 +121,30 @@ func TestWorkerAlertsOnStaleSource(t *testing.T) {
 		t.Errorf("got %v, want %s", events, want)
 	}
 }
+
+// -check must tell a working definition from the ways a definition is usually wrong.
+func TestCheck(t *testing.T) {
+	at := time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
+	withPlayedAt := domain.RadioConfig{Slug: "fr-r", Timezone: "Europe/Paris", Selectors: domain.Selector{PlayedAt: "x"}}
+	cases := []struct {
+		name string
+		cfg  domain.RadioConfig
+		step func() (*domain.Track, error)
+		ok   bool
+		want string
+	}{
+		{"complete", withPlayedAt, play("A", "One", at), true, "2026-10-05 08:00:00 UTC = 2026-10-05 10:00:00 CEST"},
+		{"no played_at selector", domain.RadioConfig{Slug: "fr-r"}, play("A", "One", time.Time{}), true, "no selector"},
+		{"played_at not extracted", withPlayedAt, play("A", "One", time.Time{}), false, "NOT EXTRACTED"},
+		{"nothing", withPlayedAt, play("", "", time.Time{}), false, "NOTHING EXTRACTED"},
+		{"no artist", withPlayedAt, play("", "One", at), false, "INCOMPLETE"},
+		{"fetch error", withPlayedAt, func() (*domain.Track, error) { return nil, errors.New("boom") }, false, "FAILED: boom"},
+	}
+	for _, c := range cases {
+		var out strings.Builder
+		scraper := &fakeScraper{steps: []func() (*domain.Track, error){c.step}}
+		if ok := Check(context.Background(), &out, c.cfg, scraper); ok != c.ok || !strings.Contains(out.String(), c.want) {
+			t.Errorf("%s: ok = %v, want %v with %q in:\n%s", c.name, ok, c.ok, c.want, out.String())
+		}
+	}
+}
