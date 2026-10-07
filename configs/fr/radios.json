@@ -3,7 +3,7 @@
   "radios": [
     {
       "name": "Radio Nova",
-      "slug": "nova",
+      "slug": "fr-nova",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,
@@ -15,7 +15,7 @@
     },
     {
       "name": "Nova Hip-Hop",
-      "slug": "nova-hip-hop",
+      "slug": "fr-nova-hip-hop",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,
@@ -27,7 +27,7 @@
     },
     {
       "name": "Nova Reggae",
-      "slug": "nova-reggae",
+      "slug": "fr-nova-reggae",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,
@@ -39,7 +39,7 @@
     },
     {
       "name": "Nova Soul",
-      "slug": "nova-soul",
+      "slug": "fr-nova-soul",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,
@@ -51,7 +51,7 @@
     },
     {
       "name": "Nouvo Nova",
-      "slug": "nouvo-nova",
+      "slug": "fr-nouvo-nova",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,
@@ -63,7 +63,7 @@
     },
     {
       "name": "Nova La Nuit",
-      "slug": "nova-la-nuit",
+      "slug": "fr-nova-la-nuit",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,
@@ -75,7 +75,7 @@
     },
     {
       "name": "Nova Classics",
-      "slug": "nova-classics",
+      "slug": "fr-nova-classics",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,
@@ -87,7 +87,7 @@
     },
     {
       "name": "Nova Danse",
-      "slug": "nova-danse",
+      "slug": "fr-nova-danse",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,
@@ -99,7 +99,7 @@
     },
     {
       "name": "Nova La Plage",
-      "slug": "nova-la-plage",
+      "slug": "fr-nova-la-plage",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,

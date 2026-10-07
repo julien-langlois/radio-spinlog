@@ -196,6 +196,11 @@ func loadRadios(fsys fs.FS) []domain.RadioConfig {
 				slog.Error("Unknown timezone, radio skipped", "radio", r.Slug, "timezone", r.Timezone, "file", file)
 				continue
 			}
+			// <country>-<station> keeps slugs unique worldwide: the same station name exists in several countries
+			if !strings.HasPrefix(r.Slug, country+"-") || r.Slug == country+"-" {
+				slog.Error("slug must be <country>-<station>, with the directory name as country; radio skipped", "radio", r.Slug, "want_prefix", country+"-", "file", file)
+				continue
+			}
 			if hasSlug(allRadios, r.Slug) {
 				slog.Error("Duplicate slug, radio skipped (slugs must be unique across all countries)", "radio", r.Slug, "file", file)
 				continue

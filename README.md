@@ -25,10 +25,10 @@ go install github.com/julien-langlois/radio-spinlog/cmd/radio-spinlog@latest
 ## Quick start
 
 ```bash
-radio-spinlog -list                    # show the available stations
-radio-spinlog                          # track the stations of local.json, or all of them
-radio-spinlog -radios nova,nova-soul   # track a specific set
-radio-spinlog -stats                   # check what is being archived (latest tracks, totals)
+radio-spinlog -list                          # show the available stations
+radio-spinlog                                # track the stations of local.json, or all of them
+radio-spinlog -radios fr-nova,fr-nova-soul   # track a specific set
+radio-spinlog -stats                         # check what is being archived (latest tracks, totals)
 ```
 
 The archive lives in your user data directory (see [Files](#files)), so the same database is used wherever you start the binary from. From a checkout of the repository, replace `radio-spinlog` with `go run ./cmd/radio-spinlog`.
@@ -37,7 +37,7 @@ Stop with `Ctrl+C` or `SIGTERM`: workers finish, buffered tracks are written, th
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `-radios a,b` | — | Comma-separated slugs to track. Overrides the local file. |
+| `-radios a,b` | — | Comma-separated [slugs](#slugs) to track (`fr-nova,fr-nova-soul`). Overrides the local file. |
 | `-list` | — | Print the available stations and exit. |
 | `-debug` | off | Log every poll and every HTTP request. |
 | `-stats` | — | Print the 10 latest tracks and the totals per station, refreshed every 2 minutes. Reads the database only, so it can run next to a crawling instance. |
@@ -71,7 +71,7 @@ The stations of this repository's `configs/` directory are compiled into the bin
   "radios": [
     {
       "name": "Radio Nova",
-      "slug": "nova",
+      "slug": "fr-nova",
       "type": "api",
       "url": "https://www.nova.fr/radios-data/www.nova.fr/all.json",
       "interval_seconds": 120,
@@ -88,13 +88,29 @@ The stations of this repository's `configs/` directory are compiled into the bin
 | Field | Required | Description |
 |---|---|---|
 | `name` | yes | Display name. |
-| `slug` | yes | Identifier stored with every track. **Must be unique across all countries**; a duplicate is skipped with an error. |
+| `slug` | yes | Identifier stored with every track, of the form `<country>-<station>`. See [Slugs](#slugs). |
 | `type` | yes | `"api"` for a JSON endpoint. Any other value means HTML. |
 | `url` | yes | Endpoint or page to poll. |
 | `interval_seconds` | yes | Polling period, 30 at least. |
 | `selectors.artist`, `selectors.title` | yes | Where to read the values (see below). |
 | `selectors.played_at` | no | Start time of the current track, when the source exposes it. |
 | `timezone` | no | IANA name (`America/New_York`). Set it per file, override it per station. |
+
+### Slugs
+
+A station is identified everywhere by its slug, never by its name: in `-radios`, in `local.json` and in the `radio_slug` column of every archived play. Names are free text and may repeat (there can be a "Radio Nova" in France and another one in Russia); slugs cannot.
+
+- **Form: `<country>-<station>`**, where `<country>` is the name of the directory holding the `radios.json`: `fr-nova` in `configs/fr/`, `ru-nova` in `configs/ru/`. A slug without that prefix, or with the prefix of another country, is skipped with an error.
+- **Unique across all countries.** The prefix makes collisions between countries impossible; within one country a duplicate is skipped with an error, and the first definition wins.
+- Keep the station part short, lowercase, ASCII, with hyphens (`fr-nova-hip-hop`). This part is a recommendation, it is not checked.
+- **A slug is permanent.** It is written on every row of `tracks`, so renaming one splits the history of the station in two. If you must rename, stop the daemon, rename in `radios.json` and `local.json`, then update the archive:
+
+  ```sql
+  UPDATE tracks SET radio_slug = 'fr-nova' WHERE radio_slug = 'nova';
+  DELETE FROM radios WHERE slug = 'nova';   -- the new slug is recorded at the next start
+  ```
+
+### Selectors
 
 Selector syntax depends on `type`:
 
@@ -110,14 +126,14 @@ Only point `played_at` at a real track start time. A field that changes on every
 Optional. Create it in your configuration directory (see [Files](#files)) to restrict the tracked stations:
 
 ```json
-{ "active_radios": ["nova", "nova-hip-hop"] }
+{ "active_radios": ["fr-nova", "fr-nova-hip-hop"] }
 ```
 
 Selection order: `-radios` flag, then `local.json`, then every configured station. Unknown slugs are ignored with a warning.
 
 ### Validation
 
-A station with a missing `slug` or `url`, an interval under 30 seconds, an unknown timezone or an already used slug is skipped with an error in the logs, as is a `radios.json` that cannot be parsed; the other stations keep running. An invalid `local.json` stops the daemon rather than silently tracking every station.
+A station with a missing `slug` or `url`, a slug that is not `<country>-<station>`, an interval under 30 seconds, an unknown timezone or an already used slug is skipped with an error in the logs, as is a `radios.json` that cannot be parsed; the other stations keep running. An invalid `local.json` stops the daemon rather than silently tracking every station.
 
 ## PostgreSQL (Supabase)
 
@@ -163,7 +179,7 @@ GROUP BY r.country;
 
 -- Latest plays of one station
 SELECT COALESCE(played_at, scraped_at) AS at_utc, artist, title
-FROM tracks WHERE radio_slug = 'nova' ORDER BY id DESC LIMIT 10;
+FROM tracks WHERE radio_slug = 'fr-nova' ORDER BY id DESC LIMIT 10;
 ```
 
 ## How it works

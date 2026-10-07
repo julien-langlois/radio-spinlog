@@ -18,13 +18,16 @@ func TestLoadRadiosValidatesAndFilters(t *testing.T) {
 		}
 	}
 	write("fr/radios.json", `{"timezone": "Europe/Paris", "radios": [
-		{"slug": "ok", "url": "http://x", "interval_seconds": 120},
-		{"slug": "tokyo", "url": "http://x", "interval_seconds": 120, "timezone": "Asia/Tokyo"},
-		{"slug": "ok", "url": "http://dup", "interval_seconds": 120},
-		{"slug": "no-interval", "url": "http://x"},
-		{"slug": "too-fast", "url": "http://x", "interval_seconds": 5},
-		{"slug": "bad-tz", "url": "http://x", "interval_seconds": 120, "timezone": "Mars/Olympus"},
-		{"slug": "no-url", "interval_seconds": 120},
+		{"slug": "fr-ok", "url": "http://x", "interval_seconds": 120},
+		{"slug": "fr-tokyo", "url": "http://x", "interval_seconds": 120, "timezone": "Asia/Tokyo"},
+		{"slug": "fr-ok", "url": "http://dup", "interval_seconds": 120},
+		{"slug": "fr-no-interval", "url": "http://x"},
+		{"slug": "fr-too-fast", "url": "http://x", "interval_seconds": 5},
+		{"slug": "fr-bad-tz", "url": "http://x", "interval_seconds": 120, "timezone": "Mars/Olympus"},
+		{"slug": "fr-no-url", "interval_seconds": 120},
+		{"slug": "no-country", "url": "http://x", "interval_seconds": 120},
+		{"slug": "us-other-country", "url": "http://x", "interval_seconds": 120},
+		{"slug": "fr-", "url": "http://x", "interval_seconds": 120},
 		{"url": "http://x", "interval_seconds": 120}
 	]}`)
 	write("us/radios.json", `{not json`)
@@ -33,10 +36,10 @@ func TestLoadRadiosValidatesAndFilters(t *testing.T) {
 	if len(radios) != 2 {
 		t.Fatalf("got %d radios, want 2: %+v", len(radios), radios)
 	}
-	if r := radios[0]; r.Slug != "ok" || r.URL != "http://x" || r.Country != "fr" || r.Timezone != "Europe/Paris" {
+	if r := radios[0]; r.Slug != "fr-ok" || r.URL != "http://x" || r.Country != "fr" || r.Timezone != "Europe/Paris" {
 		t.Errorf("unexpected first radio: %+v", r)
 	}
-	if r := radios[1]; r.Slug != "tokyo" || r.Timezone != "Asia/Tokyo" {
+	if r := radios[1]; r.Slug != "fr-tokyo" || r.Timezone != "Asia/Tokyo" {
 		t.Errorf("unexpected second radio: %+v", r)
 	}
 
@@ -51,8 +54,8 @@ func TestLoadRadiosValidatesAndFilters(t *testing.T) {
 		}
 	}
 
-	got := filterRadios(radios, []string{" tokyo", "unknown", "", "tokyo", "ok "})
-	if len(got) != 2 || got[0].Slug != "tokyo" || got[1].Slug != "ok" {
+	got := filterRadios(radios, []string{" fr-tokyo", "unknown", "", "fr-tokyo", "fr-ok "})
+	if len(got) != 2 || got[0].Slug != "fr-tokyo" || got[1].Slug != "fr-ok" {
 		t.Errorf("filterRadios = %+v", got)
 	}
 }

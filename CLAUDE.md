@@ -51,14 +51,15 @@ These are deliberate. Do not change them without being asked.
 - **Never make the daemon more aggressive toward sources**: no User-Agent spoofing or rotation, no interval under `minIntervalSeconds`, no retry loops outside the worker's backoff. Avoiding blacklisting is a hard requirement.
 - **Nothing source-specific in Go code.** Nova is only the first example; the target is any station worldwide. A new source must be expressible in `radios.json` (selectors, timezone). If it is not, extend the generic mechanism.
 - **Invalid configuration is logged and skipped, never silently accepted** (see `loadRadios`). New config fields that can harm data or sources need the same validation.
-- **Slugs are globally unique** (primary key of `radios`); duplicates are rejected at load.
+- **Slugs are `<country>-<station>` and globally unique** (primary key of `radios`): the prefix is the name of the directory holding the `radios.json` (`fr-nova` in `configs/fr/`). A wrong prefix or a duplicate is rejected at load. Station names may repeat across countries; slugs never do.
+- **A slug is permanent.** It is stored on every row of `tracks`; renaming one splits the station's history. Never rename a slug in `configs/` without being asked, and document the `UPDATE` when it happens (README, "Slugs").
 - **Shutdown order** in `main.go`: wait for workers, close the channel, wait for the writer, close the database.
 
 ## Conventions
 
 - English only for identifiers, log messages, comments and documentation.
 - Logging with `log/slog`, key/value pairs, radio slug under the `"radio"` key.
-- Adding a station is a configuration change, not a code change.
+- Adding a station is a configuration change, not a code change: `configs/<country>/radios.json`, slug `<country>-<station>`.
 - Schema changes must keep existing databases working, on both backends: `CREATE ... IF NOT EXISTS` plus an idempotent `ALTER` in `openSQLite` (see `played_at`) and `ADD COLUMN IF NOT EXISTS` in `postgresSchema`.
 - Tests are few and targeted (`loader_test.go`, `worker_test.go`, `fetch_test.go`, `playedat_test.go`, `db_test.go`). Add one when touching deduplication, time parsing, fetching or storage; use `httptest`, never a live source.
 - `ponytail:` comments mark deliberate simplifications with their known ceiling.
