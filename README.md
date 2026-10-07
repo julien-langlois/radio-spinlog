@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/julien-langlois/radio-spinlog/actions/workflows/ci.yml/badge.svg)](https://github.com/julien-langlois/radio-spinlog/actions/workflows/ci.yml)
 [![Go version](https://img.shields.io/github/go-mod/go-version/julien-langlois/radio-spinlog)](go.mod)
-[![Go Report Card](https://goreportcard.com/badge/github.com/julien-langlois/radio-spinlog)](https://goreportcard.com/report/github.com/julien-langlois/radio-spinlog)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/julien-langlois/radio-spinlog/total)](https://github.com/julien-langlois/radio-spinlog/releases)
 
@@ -212,9 +211,11 @@ Keep intervals reasonable (the bundled configuration uses 120 s) and check the t
 
 ```bash
 go build ./...
-go vet ./...
 go test ./...
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run   # lint, same version as CI
 ```
+
+Linting uses [golangci-lint](https://golangci-lint.run) with its default linters (`go vet` included); the few exclusions are in `.golangci.yml`. The command above needs no installation; with a local `golangci-lint` binary, `golangci-lint run` does the same.
 
 The storage tests always run against SQLite. To run them against PostgreSQL too, point `RADIO_SPINLOG_TEST_POSTGRES` at any server: they work in a temporary schema that is dropped afterwards.
 

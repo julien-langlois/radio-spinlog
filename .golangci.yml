@@ -1,0 +1,11 @@
+# Default linters (errcheck, govet, ineffassign, staticcheck, unused); the version is pinned in CI.
+version: "2"
+
+linters:
+  exclusions:
+    presets:
+      - std-error-handling # unchecked Close, Flush, fmt.Fprint*: nothing useful to do with these errors
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
