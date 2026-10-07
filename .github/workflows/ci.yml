@@ -11,6 +11,18 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v5
 
@@ -28,6 +40,8 @@ jobs:
         run: go vet ./...
 
       - name: Test
+        env:
+          RADIO_SPINLOG_TEST_POSTGRES: postgres://postgres:test@localhost:5432/postgres
         run: go test -race ./...
 
       - name: Build

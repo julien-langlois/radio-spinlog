@@ -38,8 +38,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 3. Initialize SQLite
-	db, err := storage.NewSQLite(globalCfg.DBPath)
+	// 3. Initialize the database (SQLite file or PostgreSQL URL)
+	db, err := storage.Open(globalCfg.DBPath)
 	if err != nil {
 		slog.Error("Database init failed", "err", err)
 		os.Exit(1)
@@ -50,19 +50,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 4. Setup Pub/Sub Channel for Tracks
-	trackChan := make(chan domain.Track, 100)
-	writerDone := make(chan struct{})
-	go func() {
-		db.StartWriter(trackChan)
-		close(writerDone)
-	}()
-
-	// 5. Setup Context for Graceful Shutdown (cancelled on Ctrl+C / SIGTERM)
+	// 4. Setup Context for Graceful Shutdown (cancelled on Ctrl+C / SIGTERM)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	slog.Info("Starting radio-spinlog", "version", version, "active_radios", len(radios), "db", globalCfg.DBPath)
+	// 5. Setup Pub/Sub Channel for Tracks
+	trackChan := make(chan domain.Track, 100)
+	writerDone := make(chan struct{})
+	go func() {
+		db.StartWriter(ctx, trackChan)
+		close(writerDone)
+	}()
+
+	slog.Info("Starting radio-spinlog", "version", version, "active_radios", len(radios), "db", storage.Redact(globalCfg.DBPath))
 
 	// 6. Initialize both scrapers
 	htmlScraper := &crawler.StaticScraper{UserAgent: globalCfg.UserAgent}
@@ -92,14 +92,14 @@ func main() {
 	slog.Warn("Shutdown signal received, closing resources...")
 	workers.Wait()   // No worker can send anymore
 	close(trackChan) // Lets the writer drain what is buffered
-	<-writerDone     // Everything is on disk before db.Close()
+	<-writerDone     // Everything is written before db.Close()
 	slog.Info("Goodbye!")
 }
 
 // showStats prints the content of the archive every 2 minutes until Ctrl+C.
 // It only reads the database, so it can run next to a crawling instance.
 func showStats(dbPath string) {
-	db, err := storage.NewSQLite(dbPath)
+	db, err := storage.Open(dbPath)
 	if err != nil {
 		slog.Error("Database init failed", "err", err)
 		os.Exit(1)

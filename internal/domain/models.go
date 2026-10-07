@@ -48,5 +48,5 @@ type GlobalConfig struct {
 	UserAgent string // sent with every request: stable and honest, so a source can identify us
 	Debug     bool   // -debug flag
 	Stats     bool   // -stats flag: show what is in the database instead of crawling
-	DBPath    string // -db flag
+	DBPath    string // -db flag or RADIO_SPINLOG_DB: SQLite file or postgres:// URL
 }

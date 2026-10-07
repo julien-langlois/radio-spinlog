@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -23,6 +24,10 @@ import (
 const minIntervalSeconds = 30
 
 const appName = "radio-spinlog"
+
+// dbEnv names the environment variable holding the database target when -db is not given.
+// A PostgreSQL URL carries a password: the environment keeps it out of the process list.
+const dbEnv = "RADIO_SPINLOG_DB"
 
 // defaultDBPath puts the archive in the per-user data directory, so the same database is used
 // wherever the binary is started from: $XDG_DATA_HOME or ~/.local/share on Linux and BSD,
@@ -65,7 +70,7 @@ func Load(version string) ([]domain.RadioConfig, *domain.GlobalConfig) {
 	configsDir := flag.String("configs", "", "Directory of <country>/radios.json files, used instead of the built-in stations")
 	defaultLocal := defaultLocalFile()
 	localFile := flag.String("local", defaultLocal, "JSON file listing the active radios (optional at its default location)")
-	dbPath := flag.String("db", defaultDBPath(), "SQLite database file")
+	dbPath := flag.String("db", "", "SQLite database file or postgres:// URL (default: $"+dbEnv+", else "+defaultDBPath()+")")
 	userAgent := flag.String("user-agent", "radio-spinlog/"+version+" (personal playlist archive)", "User-Agent sent to the sources; add a contact URL or email if you can")
 	debug := flag.Bool("debug", false, "Log every poll and HTTP request")
 	stats := flag.Bool("stats", false, "Show the latest archived tracks and totals per radio (refreshed every 2 minutes), without crawling")
@@ -78,7 +83,7 @@ func Load(version string) ([]domain.RadioConfig, *domain.GlobalConfig) {
 		os.Exit(0)
 	}
 
-	globalConfig := &domain.GlobalConfig{UserAgent: *userAgent, Debug: *debug, Stats: *stats, DBPath: *dbPath}
+	globalConfig := &domain.GlobalConfig{UserAgent: *userAgent, Debug: *debug, Stats: *stats, DBPath: cmp.Or(*dbPath, os.Getenv(dbEnv), defaultDBPath())}
 
 	// 2. Load station definitions: built into the binary, or from a directory
 	var source fs.FS = configs.FS

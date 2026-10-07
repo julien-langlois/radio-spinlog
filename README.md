@@ -8,7 +8,7 @@
 
 **Every spin, every station.**
 
-In radio jargon, a *spin* is one airplay of a song. radio-spinlog is a small Go daemon that polls the "now playing" endpoint of radio stations and archives every broadcast into SQLite: one row per play, so the same song appears as often as it is aired.
+In radio jargon, a *spin* is one airplay of a song. radio-spinlog is a small Go daemon that polls the "now playing" endpoint of radio stations and archives every broadcast into a local SQLite file, or into a PostgreSQL database such as [Supabase](https://supabase.com): one row per play, so the same song appears as often as it is aired.
 
 It is meant as the collection brick of a larger system (play counts per title, per station, per country, per time of day). It only collects; analysis happens downstream, on the database.
 
@@ -41,7 +41,7 @@ Stop with `Ctrl+C` or `SIGTERM`: workers finish, buffered tracks are written, th
 | `-list` | — | Print the available stations and exit. |
 | `-debug` | off | Log every poll and every HTTP request. |
 | `-stats` | — | Print the 10 latest tracks and the totals per station, refreshed every 2 minutes. Reads the database only, so it can run next to a crawling instance. |
-| `-db FILE` | see [Files](#files) | SQLite database file; its directory is created if needed. |
+| `-db TARGET` | `$RADIO_SPINLOG_DB`, else see [Files](#files) | SQLite database file (its directory is created if needed) or a `postgres://` URL, see [PostgreSQL](#postgresql-supabase). |
 | `-configs DIR` | built-in | Directory of `<country>/radios.json` files to use **instead of** the built-in stations. |
 | `-local FILE` | see [Files](#files) | File listing the active stations. Optional when left to its default. |
 | `-user-agent` | `radio-spinlog/<version> (personal playlist archive)` | Sent with every request. Add a contact URL or email if you can. |
@@ -57,7 +57,7 @@ Nothing is read from or written to the current directory. Default locations foll
 | macOS | `~/Library/Application Support/radio-spinlog/` | same directory |
 | Windows | `%AppData%\radio-spinlog\` | same directory |
 
-`radio-spinlog -h` prints the exact paths on your machine, and the database path is logged at startup. Override them with `-db` and `-local`.
+`radio-spinlog -h` prints the exact paths on your machine, and the database path is logged at startup. Override them with `-db` (or the `RADIO_SPINLOG_DB` environment variable) and `-local`.
 
 ## Configuration
 
@@ -119,22 +119,40 @@ Selection order: `-radios` flag, then `local.json`, then every configured statio
 
 A station with a missing `slug` or `url`, an interval under 30 seconds, an unknown timezone or an already used slug is skipped with an error in the logs, as is a `radios.json` that cannot be parsed; the other stations keep running. An invalid `local.json` stops the daemon rather than silently tracking every station.
 
+## PostgreSQL (Supabase)
+
+SQLite is the default and needs no setup. To archive into PostgreSQL instead, give the daemon a connection URL through the `RADIO_SPINLOG_DB` environment variable:
+
+```bash
+export RADIO_SPINLOG_DB='postgresql://postgres.<project>:<password>@<region>.pooler.supabase.com:5432/postgres'
+radio-spinlog            # crawls into PostgreSQL
+radio-spinlog -stats     # reads the same database
+```
+
+- **Keep the URL in the environment**, not on the command line: it contains the password, and arguments are visible to every user of the machine (`ps`). `-db` accepts a URL too and wins over the variable; with neither, the SQLite file is used. Logs show the URL with the password masked.
+- **Supabase**: copy the *Session pooler* connection string (port 5432) from the dashboard's *Connect* panel. The *Transaction pooler* (port 6543) is not supported, the daemon uses a prepared statement. The *Direct connection* string works as well where IPv6 is available.
+- Any PostgreSQL works the same way (self-hosted, Neon, RDS...): nothing is specific to Supabase. Standard URL parameters such as `sslmode=require` are honoured.
+- The tables and indexes are created at the first start, in the default schema of the connecting role, which therefore needs the `CREATE` privilege.
+- **Row level security is enabled** on both tables without any policy, so that Supabase's auto-generated REST API does not expose them to the anonymous key. The role that created the tables (the one in the URL) is not affected. To read the data with another role, add a policy (`CREATE POLICY ... FOR SELECT`) or give that role `BYPASSRLS`.
+- **The backend is chosen at startup, there is no failover to SQLite.** A failed insert is retried for about a minute (dropped connection, pooler restart); past that the track is lost and logged as `Insert failed, track lost`. If the database is unreachable at startup, the daemon exits.
+
 ## Data
 
-Everything lives in one SQLite file, `archive.db` (see [Files](#files) for its location; WAL mode, safe to read while the daemon runs).
+With SQLite everything lives in one file, `archive.db` (see [Files](#files) for its location; WAL mode, safe to read while the daemon runs). PostgreSQL holds the same two tables:
 
 ```sql
 tracks(id, radio_slug, artist, title, hash, scraped_at, played_at)
 radios(slug, name, country, timezone)
 ```
 
-- **All timestamps are UTC.** `scraped_at` is when the track was detected; `played_at` is the start time reported by the source, `NULL` when unknown. `COALESCE(played_at, scraped_at)` gives the best available time.
+- **All timestamps are UTC**, in both backends (PostgreSQL columns are `timestamp(0)` without time zone, not `timestamptz`). `scraped_at` is when the track was detected; `played_at` is the start time reported by the source, `NULL` when unknown. `COALESCE(played_at, scraped_at)` gives the best available time.
 - `radios.timezone` lets you convert back to the station's local time downstream.
 - `hash` is `sha256(lower(trim(artist)) | lower(trim(title)))`: the same song has the same hash on every station.
 - `radios` is refreshed from the configuration at each start, for the stations being tracked.
 
 ```sql
 -- How many times was each title played, and on how many stations?
+-- (SQLite; PostgreSQL wants MIN(artist), MIN(title) since they are not in the GROUP BY)
 SELECT artist, title, COUNT(*) AS plays, COUNT(DISTINCT radio_slug) AS stations
 FROM tracks GROUP BY hash ORDER BY plays DESC LIMIT 20;
 
@@ -151,7 +169,7 @@ FROM tracks WHERE radio_slug = 'nova' ORDER BY id DESC LIMIT 10;
 ## How it works
 
 ```text
-configs/**/radios.json ─► one goroutine per station ─► channel ─► single SQLite writer
+configs/**/radios.json ─► one goroutine per station ─► channel ─► single database writer
                               │
                               └─ fetch(url): shared per URL
 ```
@@ -180,6 +198,13 @@ Keep intervals reasonable (the bundled configuration uses 120 s) and check the t
 go build ./...
 go vet ./...
 go test ./...
+```
+
+The storage tests always run against SQLite. To run them against PostgreSQL too, point `RADIO_SPINLOG_TEST_POSTGRES` at any server: they work in a temporary schema that is dropped afterwards.
+
+```bash
+docker run -d --rm --name spinlog-pg -e POSTGRES_PASSWORD=test -p 127.0.0.1:55432:5432 postgres:17-alpine
+RADIO_SPINLOG_TEST_POSTGRES='postgres://postgres:test@127.0.0.1:55432/postgres' go test ./internal/storage/
 ```
 
 Logs are JSON on stdout. With `-debug`, every network request is logged as `HTTP request` with its URL and status.
