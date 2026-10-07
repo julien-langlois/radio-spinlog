@@ -46,6 +46,7 @@ Stop with `Ctrl+C` or `SIGTERM`: workers finish, buffered tracks are written, th
 | `-configs DIR` | built-in | Directory of `<country>/radios.json` files to use **instead of** the built-in stations. |
 | `-local FILE` | see [Files](#files) | File listing the active stations. Optional when left to its default. |
 | `-webhook URL` | `$RADIO_SPINLOG_WEBHOOK` | Where to push [alerts](#alerts). None by default. |
+| `-heartbeat URL` | `$RADIO_SPINLOG_HEARTBEAT` | URL pinged every 5 minutes while the daemon runs. See [Heartbeat](#heartbeat). |
 | `-user-agent` | `radio-spinlog/<version> (personal playlist archive)` | Sent with every request. Add a contact URL or email if you can. |
 | `-version` | — | Print the version and exit. |
 
@@ -210,7 +211,55 @@ radio-spinlog
 - The same event for the same station is sent at most once an hour, so a database outage is one `track_lost` alert, not one per track.
 - Alerts are best effort: one attempt, 10 seconds timeout, a failure is logged as `Alert not delivered` and never slows the collection down.
 - Stations that legitimately air no music for more than an hour (talk shows, night programmes) will raise `source_stale` and `source_recovered` every day.
-- A daemon that is not running cannot alert: pair this with a process supervisor.
+- A daemon that is not running cannot alert: that case is covered by the [heartbeat](#heartbeat).
+
+### Heartbeat
+
+To be told when the daemon itself stops (crash, machine down, network gone), give it a URL from an uptime monitor such as [healthchecks.io](https://healthchecks.io): it is requested with a `GET` at startup and then every 5 minutes, and the monitor alerts you when the pings stop.
+
+```bash
+export RADIO_SPINLOG_HEARTBEAT='https://hc-ping.com/<uuid>'
+```
+
+- Configure the monitor with a period of 5 minutes and a grace time of at least 5 more, so that one missed ping is not an incident.
+- The ping only says that the process is alive and can reach the Internet. Broken sources and database failures are reported by the [alerts](#alerts).
+- Like the webhook, the URL is a secret: keep it in the environment, it never appears in the logs. A failed ping is logged as `Heartbeat not delivered`.
+
+## Running it as a service
+
+The daemon is one static binary with no runtime dependency (the timezone database is built in). Its whole configuration fits in three optional environment variables: `RADIO_SPINLOG_DB`, `RADIO_SPINLOG_WEBHOOK` and `RADIO_SPINLOG_HEARTBEAT`.
+
+### systemd
+
+[`deploy/radio-spinlog.service`](deploy/radio-spinlog.service) runs the daemon as an unprivileged throwaway user, restarts it on failure and keeps the SQLite archive in `/var/lib/radio-spinlog/`:
+
+```bash
+sudo install -m 755 radio-spinlog /usr/local/bin/
+sudo install -m 644 deploy/radio-spinlog.service /etc/systemd/system/
+sudo install -m 600 deploy/radio-spinlog.env.example /etc/radio-spinlog.env   # then edit it
+sudo systemctl daemon-reload && sudo systemctl enable --now radio-spinlog
+journalctl -u radio-spinlog -f
+```
+
+Secrets go in `/etc/radio-spinlog.env` (see [`deploy/radio-spinlog.env.example`](deploy/radio-spinlog.env.example)). To restrict the stations, create `/etc/radio-spinlog/local.json`.
+
+### Docker
+
+```bash
+docker build -t radio-spinlog .
+
+# SQLite archive in a named volume
+docker run -d --name radio-spinlog --restart unless-stopped -v radio-spinlog-data:/data radio-spinlog
+
+# PostgreSQL: nothing to persist, the variables come from a file kept out of version control
+docker run -d --name radio-spinlog --restart unless-stopped --env-file radio-spinlog.env radio-spinlog
+```
+
+- The image is about 18 MB, runs as a non-root user and contains only the binary and CA certificates.
+- Arguments are passed as usual: `docker run --rm radio-spinlog -check -radios fr-nova`.
+- To restrict the stations, use `-radios`; to use your own definitions, mount them and pass `-configs`: `-v ./my-configs:/configs:ro radio-spinlog -configs /configs`.
+- `docker stop` sends `SIGTERM`: the daemon finishes cleanly within the default 10 seconds.
+- With `--env-file`, write the values without quotes.
 
 ## Data
 
@@ -304,7 +353,6 @@ A published version is permanent: the Go module proxy keeps it, so fix mistakes 
 - A track shorter than the polling interval can be missed entirely.
 - The HTML scraper has not been exercised against a real station yet; pages rendered by JavaScript will not work.
 - With SQLite, nothing stops two daemons from archiving the same station into the same file: every play would be written twice. Run one daemon per archive. PostgreSQL is protected, see [PostgreSQL](#postgresql-supabase).
-- [Alerts](#alerts) cover broken sources and lost tracks, not a daemon that stopped running.
 - `-configs` replaces the built-in stations instead of adding to them.
 
 ## Disclaimer

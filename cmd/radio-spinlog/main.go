@@ -9,6 +9,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	_ "time/tzdata" // station timezones must resolve on Windows and in minimal containers too
 
 	"github.com/julien-langlois/radio-spinlog/internal/alert"
 	"github.com/julien-langlois/radio-spinlog/internal/config"
@@ -101,7 +102,12 @@ func main() {
 		close(writerDone)
 	}()
 
-	slog.Info("Starting radio-spinlog", "version", version, "active_radios", len(radios), "db", storage.Redact(globalCfg.DBPath), "alerts", globalCfg.Webhook != "")
+	if err := alert.Heartbeat(ctx, globalCfg.Heartbeat); err != nil {
+		slog.Error("Invalid -heartbeat / RADIO_SPINLOG_HEARTBEAT", "err", err)
+		os.Exit(1)
+	}
+
+	slog.Info("Starting radio-spinlog", "version", version, "active_radios", len(radios), "db", storage.Redact(globalCfg.DBPath), "alerts", globalCfg.Webhook != "", "heartbeat", globalCfg.Heartbeat != "")
 	alert.Send(alert.Started, "", fmt.Sprintf("%s started, tracking %d stations", version, len(radios)))
 
 	// 6. One worker per radio

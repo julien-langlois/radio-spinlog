@@ -1,0 +1,38 @@
+# systemd unit for radio-spinlog.
+#
+#   sudo install -m 755 radio-spinlog /usr/local/bin/
+#   sudo install -m 644 deploy/radio-spinlog.service /etc/systemd/system/
+#   sudo install -m 600 deploy/radio-spinlog.env.example /etc/radio-spinlog.env   # then edit it
+#   sudo systemctl daemon-reload && sudo systemctl enable --now radio-spinlog
+#   journalctl -u radio-spinlog -f
+[Unit]
+Description=radio-spinlog, radio airplay archiver
+Documentation=https://github.com/julien-langlois/radio-spinlog
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/radio-spinlog
+
+# Runs as a throwaway unprivileged user owning /var/lib/radio-spinlog (the SQLite archive)
+DynamicUser=yes
+StateDirectory=radio-spinlog
+Environment=RADIO_SPINLOG_DB=/var/lib/radio-spinlog/archive.db
+# Optional list of active stations: /etc/radio-spinlog/local.json
+Environment=XDG_CONFIG_HOME=/etc
+# Secrets and overrides (database URL, webhook, heartbeat); values here win over the lines above
+EnvironmentFile=-/etc/radio-spinlog.env
+
+# A crash loop must not hammer the sources
+Restart=on-failure
+RestartSec=30
+# The daemon stops on SIGTERM: workers finish, buffered tracks are written
+TimeoutStopSec=90
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

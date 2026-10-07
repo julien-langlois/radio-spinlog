@@ -33,6 +33,9 @@ const dbEnv = "RADIO_SPINLOG_DB"
 // Webhook URLs embed a token, hence the environment here too.
 const webhookEnv = "RADIO_SPINLOG_WEBHOOK"
 
+// heartbeatEnv names the environment variable holding the heartbeat URL when -heartbeat is not given
+const heartbeatEnv = "RADIO_SPINLOG_HEARTBEAT"
+
 // defaultDBPath puts the archive in the per-user data directory, so the same database is used
 // wherever the binary is started from: $XDG_DATA_HOME or ~/.local/share on Linux and BSD,
 // ~/Library/Application Support on macOS, %AppData% on Windows.
@@ -76,6 +79,7 @@ func Load(version string) ([]domain.RadioConfig, *domain.GlobalConfig) {
 	localFile := flag.String("local", defaultLocal, "JSON file listing the active radios (optional at its default location)")
 	dbPath := flag.String("db", "", "SQLite database file or postgres:// URL (default: $"+dbEnv+", else "+defaultDBPath()+")")
 	webhook := flag.String("webhook", "", "URL receiving a JSON POST when a source goes quiet or tracks are lost (default: $"+webhookEnv+")")
+	heartbeat := flag.String("heartbeat", "", "URL pinged with a GET every 5 minutes while the daemon runs, for an uptime monitor (default: $"+heartbeatEnv+")")
 	userAgent := flag.String("user-agent", "radio-spinlog/"+version+" (personal playlist archive)", "User-Agent sent to the sources; add a contact URL or email if you can")
 	debug := flag.Bool("debug", false, "Log every poll and HTTP request")
 	stats := flag.Bool("stats", false, "Show the latest archived tracks and totals per radio (refreshed every 2 minutes), without crawling")
@@ -89,7 +93,7 @@ func Load(version string) ([]domain.RadioConfig, *domain.GlobalConfig) {
 		os.Exit(0)
 	}
 
-	globalConfig := &domain.GlobalConfig{UserAgent: *userAgent, Debug: *debug, Stats: *stats, Check: *check, DBPath: cmp.Or(*dbPath, os.Getenv(dbEnv), defaultDBPath()), Webhook: cmp.Or(*webhook, os.Getenv(webhookEnv))}
+	globalConfig := &domain.GlobalConfig{UserAgent: *userAgent, Debug: *debug, Stats: *stats, Check: *check, DBPath: cmp.Or(*dbPath, os.Getenv(dbEnv), defaultDBPath()), Webhook: cmp.Or(*webhook, os.Getenv(webhookEnv)), Heartbeat: cmp.Or(*heartbeat, os.Getenv(heartbeatEnv))}
 
 	// 2. Load station definitions: built into the binary, or from a directory
 	var source fs.FS = configs.FS

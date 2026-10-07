@@ -2,6 +2,7 @@ package alert
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -10,7 +11,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestSend(t *testing.T) {
@@ -62,4 +65,41 @@ func TestSend(t *testing.T) {
 		t.Errorf("unexpected log for a failed delivery: %s", s)
 	}
 	_ = Configure("")
+}
+
+func TestHeartbeat(t *testing.T) {
+	saved := heartbeatEvery
+	heartbeatEvery = 10 * time.Millisecond
+	defer func() { heartbeatEvery = saved }()
+
+	var pings atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			pings.Add(1)
+		}
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := Heartbeat(ctx, "ftp://nope"); err == nil {
+		t.Error("an invalid heartbeat URL must be rejected")
+	}
+	if err := Heartbeat(ctx, ""); err != nil {
+		t.Errorf("no heartbeat URL is valid: %v", err)
+	}
+	if err := Heartbeat(ctx, srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(5 * time.Second); pings.Load() < 3; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("got %d pings, want at least 3", pings.Load())
+		}
+	}
+	cancel()
+	time.Sleep(50 * time.Millisecond) // let a ping in flight land
+	stopped := pings.Load()
+	time.Sleep(50 * time.Millisecond)
+	if pings.Load() != stopped {
+		t.Error("the heartbeat kept pinging after the shutdown")
+	}
 }

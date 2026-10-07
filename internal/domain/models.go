@@ -51,4 +51,5 @@ type GlobalConfig struct {
 	Check     bool   // -check flag: fetch each selected radio once and print what is extracted, archive nothing
 	DBPath    string // -db flag or RADIO_SPINLOG_DB: SQLite file or postgres:// URL
 	Webhook   string // -webhook flag or RADIO_SPINLOG_WEBHOOK: URL receiving the alerts, empty for none
+	Heartbeat string // -heartbeat flag or RADIO_SPINLOG_HEARTBEAT: URL pinged every 5 minutes, empty for none
 }

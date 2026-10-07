@@ -1,6 +1,7 @@
 // Package alert pushes the few events that need a human (a source gone quiet, tracks being
 // lost) to a webhook. Everything is also logged by the caller: without a webhook, alerts are
-// simply log lines.
+// simply log lines. It also pings a heartbeat URL, for the one failure a webhook cannot report:
+// a daemon that is no longer running.
 package alert
 
 import (
@@ -26,6 +27,9 @@ const (
 )
 
 var (
+	// heartbeatEvery is the ping period; the monitoring service must tolerate at least twice that
+	heartbeatEvery = 5 * time.Minute
+
 	// cooldown mutes repeats of the same event for the same radio, so an outage is one alert, not a flood
 	cooldown = time.Hour
 
@@ -37,13 +41,20 @@ var (
 	pending  sync.WaitGroup
 )
 
+func checkURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return errors.New("not an http(s) URL")
+	}
+	return nil
+}
+
 // Configure sets the webhook URL; an empty one disables alerts. Call it once at startup.
 // The URL usually embeds a token: it is never logged, not even in errors.
 func Configure(rawURL string) error {
 	if rawURL != "" {
-		u, err := url.Parse(rawURL)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return errors.New("webhook must be an http(s) URL")
+		if err := checkURL(rawURL); err != nil {
+			return err
 		}
 	}
 	mu.Lock()
@@ -71,20 +82,49 @@ func Send(event, radio, text string) {
 	text = "radio-spinlog: " + text
 	body, _ := json.Marshal(map[string]string{"event": event, "radio": radio, "text": text, "content": text})
 	pending.Go(func() {
-		if err := post(target, body); err != nil {
+		if err := request(http.MethodPost, target, body); err != nil {
 			slog.Error("Alert not delivered", "event", event, "radio", radio, "err", err)
 		}
 	})
 }
 
-func post(target string, body []byte) error {
+// Heartbeat pings rawURL with a GET now and every heartbeatEvery until ctx is cancelled, so an
+// external monitor (healthchecks.io and the like) notices when the daemon stops. An empty URL
+// does nothing. Like the webhook, the URL is a secret and is never logged.
+func Heartbeat(ctx context.Context, rawURL string) error {
+	if rawURL == "" {
+		return nil
+	}
+	if err := checkURL(rawURL); err != nil {
+		return err
+	}
+	go func() {
+		ticker := time.NewTicker(heartbeatEvery)
+		defer ticker.Stop()
+		for {
+			if err := request(http.MethodGet, rawURL, nil); err != nil {
+				slog.Warn("Heartbeat not delivered", "err", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	return nil
+}
+
+func request(method, target string, body []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), client.Timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
 	if err != nil {
-		return errors.New("invalid webhook URL")
+		return errors.New("invalid URL")
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	res, err := client.Do(req)
 	if err != nil {
 		// A *url.Error prints the URL, token included: keep only the cause
@@ -96,7 +136,7 @@ func post(target string, body []byte) error {
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
-		return fmt.Errorf("webhook answered %s", res.Status)
+		return fmt.Errorf("server answered %s", res.Status)
 	}
 	return nil
 }

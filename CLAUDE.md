@@ -9,13 +9,15 @@ go build ./...
 go vet ./...
 go test ./...
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run   # same version as CI, config in .golangci.yml
-go run ./cmd/radio-spinlog [-radios a,b] [-list] [-debug] [-stats] [-check] [-db FILE|postgres://URL] [-webhook URL] [-configs DIR] [-local FILE] [-user-agent "..."] [-version]
+go run ./cmd/radio-spinlog [-radios a,b] [-list] [-debug] [-stats] [-check] [-db FILE|postgres://URL] [-webhook URL] [-heartbeat URL] [-configs DIR] [-local FILE] [-user-agent "..."] [-version]
 ```
 
 - Stations are embedded from `configs/` at build time (`-configs DIR` reads a directory instead). `-db` and `-local` default to per-user directories (`~/.local/share/radio-spinlog/archive.db` and `~/.config/radio-spinlog/local.json` on Linux; see `defaultDBPath` / `defaultLocalFile`), never the working directory.
 - The database target is `-db`, else the `RADIO_SPINLOG_DB` environment variable, else the SQLite default. A `postgres://` or `postgresql://` URL selects PostgreSQL.
-- Alerts go to `-webhook`, else the `RADIO_SPINLOG_WEBHOOK` environment variable; none by default.
+- Alerts go to `-webhook`, else the `RADIO_SPINLOG_WEBHOOK` environment variable; the liveness ping goes to `-heartbeat`, else `RADIO_SPINLOG_HEARTBEAT`. None by default.
+- `docker build -t radio-spinlog .` builds the image (also built in CI); `deploy/` holds the systemd unit and its environment file example.
 - `RADIO_SPINLOG_TEST_POSTGRES=postgres://...` also runs the storage tests against PostgreSQL (in a temporary schema); CI sets it with a service container.
+- The binary must stay self-contained: `time/tzdata` is embedded (`main.go`) because Windows and minimal containers have no timezone database.
 - No cgo: both drivers are pure Go (`modernc.org/sqlite`, `github.com/jackc/pgx/v5/stdlib`). Keep it that way, releases are cross-compiled with `CGO_ENABLED=0`.
 - Releases: pushing a `v*` tag runs GoReleaser (`.goreleaser.yaml`, `.github/workflows/release.yml`). Never tag or push without being asked; a published version cannot be changed.
 - A real run hits live third-party endpoints and writes to the user's real archive unless `-db` points elsewhere. Keep manual runs short and do not lower intervals to test faster.
@@ -33,11 +35,13 @@ internal/crawler/scraper.go       Scraper interface + StaticScraper (HTML, goque
 internal/crawler/api_scraper.go   ApiScraper (JSON, gjson)
 internal/crawler/playedat.go      source timestamp → UTC
 internal/crawler/hash.go          song fingerprint
-internal/alert/alert.go           webhook alerts (stale source, lost tracks): async, per-event cooldown, no-op without a URL
+internal/alert/alert.go           webhook alerts (stale source, lost tracks): async, per-event cooldown, no-op without a URL; heartbeat ping
 internal/storage/db.go            SQLite and PostgreSQL backends: schemas, radios upsert, collector locks, single writer with insert retry, LastKey
 internal/storage/stats.go         -stats view (sanity check only; analytics belong to a separate tool)
 configs/<country>/radios.json     station definitions; directory name = country code
 configs/embed.go                  embeds the station definitions into the binary
+Dockerfile                        static binary on distroless, non-root, SQLite archive in /data
+deploy/                           systemd unit and environment file example
 ```
 
 ## Invariants
@@ -52,9 +56,9 @@ These are deliberate. Do not change them without being asked.
 - **One backend per run, no failover.** The target picks SQLite or PostgreSQL at startup; SQLite never takes over when PostgreSQL is down (the writer retries, then logs the lost track).
 - **Both backends behave the same.** Queries are written once with `?` placeholders (`DB.q`); anything dialect-specific goes behind `DB.pg` and is covered by `TestReplaysAreKept` on both. Nothing Supabase-specific: plain PostgreSQL only.
 - **A database URL is a secret.** Log it only through `storage.Redact`, never print it in `-h` output or error messages.
-- **The webhook URL is a secret too** (it embeds a token) and is never logged, including through `*url.Error` (see `alert.post`).
+- **The webhook and heartbeat URLs are secrets too** (they embed a token) and are never logged, including through `*url.Error` (see `alert.request`).
 - **Alerts never get in the way of collection.** `alert.Send` is asynchronous, best effort and muted by a cooldown; every alert is also a log line at the call site. No retries, no queue.
-- **All HTTP toward sources goes through `crawler.fetch`.** It guarantees one request per URL per interval regardless of how many radios share that URL, sends conditional requests and obeys `Retry-After`. Never call `http.Get` or build another client in a scraper. The only other HTTP client is the webhook one in `internal/alert`.
+- **All HTTP toward sources goes through `crawler.fetch`.** It guarantees one request per URL per interval regardless of how many radios share that URL, sends conditional requests and obeys `Retry-After`. Never call `http.Get` or build another client in a scraper. The only other HTTP client is the one in `internal/alert` (webhook, heartbeat).
 - **Never make the daemon more aggressive toward sources**: no User-Agent spoofing or rotation, no interval under `minIntervalSeconds`, no retry loops outside the worker's backoff. Avoiding blacklisting is a hard requirement.
 - **Nothing source-specific in Go code.** Nova is only the first example; the target is any station worldwide. A new source must be expressible in `radios.json` (selectors, timezone). If it is not, extend the generic mechanism.
 - **Invalid configuration is logged and skipped, never silently accepted** (see `loadRadios`). New config fields that can harm data or sources need the same validation.
@@ -74,6 +78,6 @@ These are deliberate. Do not change them without being asked.
 ## Known gaps
 
 - `flag.Parse` and `os.Exit` live inside `config.Load`; test `loadRadios` and `filterRadios` instead.
-- Alerts (`internal/alert`) cover stale sources and lost tracks, not a daemon that is down. The former `internal/notifier` (WhatsApp, i18n) was removed as dead code; an archive sits in `data/notifier-backup.tar.gz`.
+- Alerts (`internal/alert`) cover stale sources and lost tracks; a daemon that is down is only noticed through the heartbeat, if one is configured. The former `internal/notifier` (WhatsApp, i18n) was removed as dead code; an archive sits in `data/notifier-backup.tar.gz`.
 - `StaticScraper` has never run against a real station (`-check` is the way to try one).
 - `data/` and `local.json` at the repository root are leftovers from before the per-user directories; they are git-ignored and no longer read by default.

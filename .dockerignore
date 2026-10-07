@@ -1,0 +1,11 @@
+.git
+.github
+.claude
+data
+dist
+bin
+*.db
+*.db-shm
+*.db-wal
+local.json
+.env*
