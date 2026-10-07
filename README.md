@@ -150,6 +150,7 @@ radio-spinlog -stats     # reads the same database
 - Any PostgreSQL works the same way (self-hosted, Neon, RDS...): nothing is specific to Supabase. Standard URL parameters such as `sslmode=require` are honoured.
 - The tables and indexes are created at the first start, in the default schema of the connecting role, which therefore needs the `CREATE` privilege.
 - **Row level security is enabled** on both tables without any policy, so that Supabase's auto-generated REST API does not expose them to the anonymous key. The role that created the tables (the one in the URL) is not affected. To read the data with another role, add a policy (`CREATE POLICY ... FOR SELECT`) or give that role `BYPASSRLS`.
+- **One collector per station.** Two daemons archiving the same station into the same database would write every play twice. Each daemon therefore reserves its stations at startup: a station already held by another daemon is skipped with an error (`Radio already archived into this database by another collector`), and a daemon left with no station exits. Daemons with different stations can share a database. The reservation is a PostgreSQL advisory lock: it locks no table, so reading the data (dashboard, `-stats`, your own queries) is never blocked. It is released when the daemon stops.
 - **The backend is chosen at startup, there is no failover to SQLite.** A failed insert is retried for about a minute (dropped connection, pooler restart); past that the track is lost and logged as `Insert failed, track lost`. If the database is unreachable at startup, the daemon exits.
 
 ## Alerts
@@ -276,6 +277,7 @@ A published version is permanent: the Go module proxy keeps it, so fix mistakes 
 - Without a `played_at` selector, the same song played twice in a row (or on both sides of an ad break) is counted once.
 - A track shorter than the polling interval can be missed entirely.
 - The HTML scraper has not been exercised against a real station yet; pages rendered by JavaScript will not work.
+- With SQLite, nothing stops two daemons from archiving the same station into the same file: every play would be written twice. Run one daemon per archive. PostgreSQL is protected, see [PostgreSQL](#postgresql-supabase).
 - [Alerts](#alerts) cover broken sources and lost tracks, not a daemon that stopped running.
 - `-configs` replaces the built-in stations instead of adding to them.
 

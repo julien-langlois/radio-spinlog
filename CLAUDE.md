@@ -33,7 +33,7 @@ internal/crawler/api_scraper.go   ApiScraper (JSON, gjson)
 internal/crawler/playedat.go      source timestamp → UTC
 internal/crawler/hash.go          song fingerprint
 internal/alert/alert.go           webhook alerts (stale source, lost tracks): async, per-event cooldown, no-op without a URL
-internal/storage/db.go            SQLite and PostgreSQL backends: schemas, radios upsert, single writer with insert retry, LastKey
+internal/storage/db.go            SQLite and PostgreSQL backends: schemas, radios upsert, collector locks, single writer with insert retry, LastKey
 internal/storage/stats.go         -stats view (sanity check only; analytics belong to a separate tool)
 configs/<country>/radios.json     station definitions; directory name = country code
 configs/embed.go                  embeds the station definitions into the binary
@@ -47,6 +47,7 @@ These are deliberate. Do not change them without being asked.
 - **All timestamps in the database are UTC**, formatted `YYYY-MM-DD HH:MM:SS` (same as SQLite's `CURRENT_TIMESTAMP`). Local time is derived downstream from `radios.timezone`. Timezones are IANA names per station, never inferred from the country.
 - **A play is identified by `Track.PlayKey()`** (hash + `played_at` when known). The worker's debouncing and `DB.LastKey` must stay consistent with it, on both backends (`DB.timeText`).
 - **Only `DB.StartWriter` writes tracks.** Workers send on the channel.
+- **One collector per station per PostgreSQL database** (`DB.LockRadios`, session advisory locks keyed on schema + slug, taken in `main.go` before `UpsertRadios`). `-stats` and any other reader must never take them. SQLite has no such guard.
 - **One backend per run, no failover.** The target picks SQLite or PostgreSQL at startup; SQLite never takes over when PostgreSQL is down (the writer retries, then logs the lost track).
 - **Both backends behave the same.** Queries are written once with `?` placeholders (`DB.q`); anything dialect-specific goes behind `DB.pg` and is covered by `TestReplaysAreKept` on both. Nothing Supabase-specific: plain PostgreSQL only.
 - **A database URL is a secret.** Log it only through `storage.Redact`, never print it in `-h` output or error messages.

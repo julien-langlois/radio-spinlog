@@ -52,6 +52,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	// A station is archived by one collector at a time, or every play would be written twice
+	radios, err = db.LockRadios(radios)
+	if err != nil {
+		slog.Error("Cannot reserve the radios in the database", "err", err)
+		os.Exit(1)
+	}
+	if len(radios) == 0 {
+		slog.Error("Every requested radio is already archived by another collector on this database, nothing to do")
+		os.Exit(1)
+	}
 	if err := db.UpsertRadios(radios); err != nil {
 		slog.Error("Failed to record radios", "err", err)
 		os.Exit(1)

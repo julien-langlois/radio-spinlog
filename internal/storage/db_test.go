@@ -190,3 +190,61 @@ func TestInsertIsRetried(t *testing.T) {
 		t.Fatalf("got %d rows, want 3 (the track sent during the outage is lost)", n)
 	}
 }
+
+// Two collectors on one database must not archive the same station; different stations coexist.
+func TestLockRadios(t *testing.T) {
+	radios := func(slugs ...string) (rs []domain.RadioConfig) {
+		for _, slug := range slugs {
+			rs = append(rs, domain.RadioConfig{Slug: slug})
+		}
+		return rs
+	}
+	lock := func(db *DB, slugs ...string) string {
+		got, err := db.LockRadios(radios(slugs...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, r := range got {
+			names = append(names, r.Slug)
+		}
+		return strings.Join(names, ",")
+	}
+	open := func(target string) *DB {
+		db, err := Open(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(db.Close)
+		return db
+	}
+
+	t.Run("sqlite", func(t *testing.T) {
+		if got := lock(open(filepath.Join(t.TempDir(), "test.db")), "fr-a", "fr-b"); got != "fr-a,fr-b" {
+			t.Errorf("got %q, want every radio (no lock on SQLite)", got)
+		}
+	})
+	t.Run("postgres", func(t *testing.T) {
+		target := postgresTarget(t)
+		first, second := open(target), open(target)
+		if got := lock(first, "fr-a", "fr-b"); got != "fr-a,fr-b" {
+			t.Errorf("first collector got %q, want fr-a,fr-b", got)
+		}
+		if got := lock(second, "fr-b", "fr-c"); got != "fr-c" {
+			t.Errorf("second collector got %q, want fr-c only", got)
+		}
+		// Reading and writing are not affected by the locks
+		if err := second.UpsertRadios(radios("fr-b")); err != nil {
+			t.Error(err)
+		}
+		// Another archive (schema) of the same database is independent
+		if got := lock(open(postgresTarget(t)), "fr-a"); got != "fr-a" {
+			t.Errorf("collector on another schema got %q, want fr-a", got)
+		}
+		// A collector that stops frees its stations
+		first.Close()
+		if got := lock(second, "fr-a", "fr-b"); got != "fr-a,fr-b" {
+			t.Errorf("after the first collector stopped, got %q, want fr-a,fr-b", got)
+		}
+	})
+}

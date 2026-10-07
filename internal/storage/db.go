@@ -21,8 +21,9 @@ import (
 // DB is the archive: a local SQLite file, or a PostgreSQL database when the target is a postgres:// URL.
 // The backend is chosen once at startup; there is no failover from one to the other.
 type DB struct {
-	db *sql.DB
-	pg bool
+	db       *sql.DB
+	pg       bool
+	lockConn *sql.Conn // PostgreSQL session holding the collector locks, see LockRadios
 }
 
 // insertRetryDelays spreads the retries of a failed insert over about a minute: enough for a
@@ -166,6 +167,48 @@ func (s *DB) timeText(expr string) string {
 	return "to_char(" + expr + ", 'YYYY-MM-DD HH24:MI:SS')"
 }
 
+// LockRadios reserves the given radios for this collector and returns the ones it obtained.
+// Two collectors archiving the same station into the same PostgreSQL database would write every
+// play twice, without any error: the second one is refused the stations the first one holds.
+// Collectors with different stations coexist. Readers are not concerned: these are advisory
+// locks, they lock no table and no row.
+//
+// The locks live as long as one dedicated session, released by Close or by the death of the
+// process. SQLite has no equivalent, so every radio is returned.
+// ponytail: if that session drops (network cut), the locks are gone until the next start and
+// nothing re-takes them; add a periodic re-lock if collectors ever run unattended in numbers.
+func (s *DB) LockRadios(radios []domain.RadioConfig) ([]domain.RadioConfig, error) {
+	if !s.pg {
+		return radios, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if s.lockConn == nil {
+		conn, err := s.db.Conn(ctx)
+		if err != nil {
+			return nil, err
+		}
+		s.lockConn = conn
+	}
+	var locked []domain.RadioConfig
+	for _, r := range radios {
+		var ok bool
+		// Key: a constant for this tool + a hash of schema and slug, so separate archives in one
+		// database do not collide. A hash collision between two slugs only refuses a station.
+		err := s.lockConn.QueryRowContext(ctx,
+			`SELECT pg_try_advisory_lock(1936746862, hashtext(current_schema() || '/' || $1))`, r.Slug).Scan(&ok)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			slog.Error("Radio already archived into this database by another collector, skipped", "radio", r.Slug)
+			continue
+		}
+		locked = append(locked, r)
+	}
+	return locked, nil
+}
+
 // UpsertRadios records the station metadata (country, timezone) that tracks.radio_slug points to.
 // All timestamps in tracks are UTC; radios.timezone gives the station's local time when needed.
 func (s *DB) UpsertRadios(radios []domain.RadioConfig) error {
@@ -246,5 +289,8 @@ func (s *DB) StartWriter(ctx context.Context, trackChan <-chan domain.Track) {
 }
 
 func (s *DB) Close() {
+	if s.lockConn != nil {
+		s.lockConn.Close()
+	}
 	s.db.Close()
 }
