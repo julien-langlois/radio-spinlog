@@ -118,9 +118,9 @@ A station is identified everywhere by its slug, never by its name: in `-radios`,
 Selector syntax depends on `type`:
 
 - **`api`**: [gjson paths](https://github.com/tidwall/gjson/blob/master/SYNTAX.md), for example `now.artist`, or a query such as `#(radio.code=="nova-soul").currentTrack.artist` when the payload is an array of stations. Prefer a query over a positional index: it survives a reordering of the source.
-- **HTML**: CSS selectors; the text of the first match is used. Illustrative example: `".now-playing .artist"`.
+- **HTML**: CSS selectors; the text of the first match is used, with whitespace and line breaks collapsed. Illustrative example: `".now-playing .artist"`.
 
-`played_at` accepts unix seconds or milliseconds, RFC 3339 (`2026-10-05T10:50:07+02:00`), or a local `YYYY-MM-DD HH:MM:SS` which is interpreted in the station's `timezone`. Country is not enough to convert local times (several timezones per country, daylight saving), hence the explicit timezone. Without one, local times are read as UTC and a warning is logged.
+`played_at` accepts unix seconds or milliseconds, RFC 3339 (`2026-10-05T10:50:07+02:00`), a local `YYYY-MM-DD HH:MM:SS` which is interpreted in the station's `timezone`, or a bare local clock time (`HH:MM` or `HH:MM:SS`). A clock time has no date: the day that puts it closest to the moment of the poll is assumed, so a track started at 23:58 and read at 00:01 is dated the day before. Prefer a full timestamp when the source has one: a frozen page showing the same clock time for days produces one phantom play per day. Country is not enough to convert local times (several timezones per country, daylight saving), hence the explicit timezone. Without one, local times are read as UTC and a warning is logged.
 
 Only point `played_at` at a real track start time. A field that changes on every request (server time, for instance) would create a new row at every poll.
 

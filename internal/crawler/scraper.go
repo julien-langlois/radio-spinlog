@@ -3,6 +3,7 @@ package crawler
 import (
 	"bytes"
 	"context"
+	"strings"
 	"time"
 
 	"github.com/julien-langlois/radio-spinlog/internal/domain"
@@ -38,12 +39,12 @@ func (s *StaticScraper) Fetch(ctx context.Context, cfg domain.RadioConfig) (*dom
 		return nil, err
 	}
 
-	artist := doc.Find(cfg.Selectors.Artist).First().Text()
-	title := doc.Find(cfg.Selectors.Title).First().Text()
+	artist := text(doc, cfg.Selectors.Artist)
+	title := text(doc, cfg.Selectors.Title)
 
 	var playedAt string
 	if cfg.Selectors.PlayedAt != "" {
-		playedAt = doc.Find(cfg.Selectors.PlayedAt).First().Text()
+		playedAt = text(doc, cfg.Selectors.PlayedAt)
 	}
 
 	return &domain.Track{
@@ -51,4 +52,11 @@ func (s *StaticScraper) Fetch(ctx context.Context, cfg domain.RadioConfig) (*dom
 		Title:    title,
 		PlayedAt: parsePlayedAt(playedAt, cfg),
 	}, nil
+}
+
+// text returns the text of the first match with its whitespace collapsed, as a browser shows it:
+// indentation and line breaks of the markup are not part of the value, and an element holding
+// only whitespace (ad break) is empty
+func text(doc *goquery.Document, selector string) string {
+	return strings.Join(strings.Fields(doc.Find(selector).First().Text()), " ")
 }
